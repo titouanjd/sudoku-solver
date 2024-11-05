@@ -1,1 +1,5 @@
+# macos file attributes
 /.DS_Store
+# Python cache files
+__pycache__/
+*.py[cod]
