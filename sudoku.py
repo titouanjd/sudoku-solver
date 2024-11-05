@@ -4,14 +4,14 @@ class Sudoku:
         self.height = len(grid)
         self.width = len(grid[0])
 
-    def is_valid(self, r, c, k) -> bool:
+    def is_valid(self, r: int, c: int, k: int) -> bool:
         """Check if placing k at (r, c) is valid according to Sudoku rules."""
         # Check row
         if k in self.grid[r]:
             return False
 
         # Check column
-        if k in [self.grid[i][c] for i in range(9)]:
+        if k in [self.grid[i][c] for i in range(self.width)]:
             return False
 
         # Check box
@@ -20,20 +20,21 @@ class Sudoku:
 
         return True
 
-    def solve(self, r=0, c=0) -> bool:
-        if r == self.height:
+    def solve(self, r: int = 0, c: int = 0) -> bool:
+        """Solve Sudoku puzzle."""
+        if r == self.height:  # if end of grid reached, final solution found
             return True
-        elif c == self.width:
+        elif c == self.width:  # if last column reached, change row
             return self.solve(r+1, 0)
-        elif self.grid[r][c] != 0:
+        elif self.grid[r][c] != 0:  # if cell already filled, change column
             return self.solve(r, c+1)
         else:
-            for k in range(1, 10):
-                if self.is_valid(r, c, k):
+            for k in range(1, 10):  # try all k=0-9 values
+                if self.is_valid(r, c, k):  # check if k is valid at (r, c)
                     self.grid[r][c] = k
                     if self.solve(r, c+1):
                         return True
-                    self.grid[r][c] = 0
+                    self.grid[r][c] = 0  # reset cell value if impossible
             return False
 
     def __str__(self) -> str:
@@ -49,7 +50,7 @@ class Sudoku:
 
                 grid_str += str(self.grid[i][j]) if self.grid[i][j] != 0 else "."
                 
-                if j != 8:
+                if j != self.width - 1:
                     grid_str += " "
                 else:
                     grid_str += "\n"
