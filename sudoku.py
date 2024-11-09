@@ -1,23 +1,21 @@
 class Sudoku:
-    def __init__(self, grid: list[list]) -> None:
+    def __init__(self, grid: list[list[int]]) -> None:
         self.grid = grid
         self.height = len(grid)
         self.width = len(grid[0])
 
+        # Pre-define row, column, and box sets for quick constraint checks
+        self.rows = [set(row) for row in grid]
+        self.cols = [set(grid[i][j] for i in range(self.height)) for j in range(self.width)]
+        self.boxes = [
+            [set(grid[i][j] for i in range(r, r+3) for j in range(c, c+3))
+             for c in range(0, self.width, 3)] for r in range(0, self.height, 3)
+        ]
+
     def is_valid(self, r: int, c: int, k: int) -> bool:
         """Check if placing k at (r, c) is valid according to Sudoku rules."""
-        # Check row
-        if k in self.grid[r]:
+        if k in self.rows[r] or k in self.cols[c] or k in self.boxes[r//3][c//3]:
             return False
-
-        # Check column
-        if k in [self.grid[i][c] for i in range(self.width)]:
-            return False
-
-        # Check box
-        if k in [self.grid[i][j] for i in range(r//3*3, r//3*3+3) for j in range(c//3*3, c//3*3+3)]:
-            return False
-
         return True
 
     def solve(self, r: int = 0, c: int = 0) -> bool:
@@ -32,9 +30,15 @@ class Sudoku:
             for k in range(1, 10):  # try all k=0-9 values
                 if self.is_valid(r, c, k):  # check if k is valid at (r, c)
                     self.grid[r][c] = k
+                    self.rows[r].add(k)
+                    self.cols[c].add(k)
+                    self.boxes[r//3][c//3].add(k)
                     if self.solve(r, c+1):
                         return True
                     self.grid[r][c] = 0  # reset cell value if impossible
+                    self.rows[r].remove(k)
+                    self.cols[c].remove(k)
+                    self.boxes[r//3][c//3].remove(k)
             return False
 
     def __str__(self) -> str:
