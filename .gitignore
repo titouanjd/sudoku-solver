@@ -1,5 +1,8 @@
 # macos file attributes
-/.DS_Store
-# python cache files
+**/.DS_Store
+
+# python cached files
 __pycache__/
-*.py[cod]
+
+# virtual environment
+.venv/
