@@ -1,4 +1,5 @@
 from sudoku import Sudoku
+import warnings
 import math
 import numpy as np
 import cv2 as cv
@@ -7,7 +8,7 @@ import keras
 
 
 def show_img(img):
-    cv.imshow('Sudoku grid', img)
+    cv.imshow(f'Sudoku grid {img.shape}', img)
     cv.waitKey()
     cv.destroyAllWindows()
 
@@ -54,7 +55,7 @@ def get_warped_image(img, polygon):
     # source po
     source_points = np.array([top_left, top_right, bottom_right, bottom_left],
                              dtype='float32')
-    
+
     # side length of square
     side = int(max(
         math.dist(top_left, top_right),
@@ -65,7 +66,7 @@ def get_warped_image(img, polygon):
 
     dest_points = np.array([[0, 0], [side, 0], [side, side], [0, side]],
                            dtype='float32')
-    
+
     # compute perspective transform matrix and apply it to image
     matrix = cv.getPerspectiveTransform(src=source_points, dst=dest_points)
     warped_img = cv.warpPerspective(img, matrix, dsize=(side, side))
@@ -80,13 +81,13 @@ def extract_digit(cell):
     # if no contours were found than this is an empty cell
     if len(contours) == 0:
         return
-    
+
     # otherwise, find the largest contour in the cell and create a
     # mask for the contour
     largest_contour = max(contours, key=cv.contourArea)
     mask = np.zeros(thresh.shape, dtype="uint8")
     cv.drawContours(mask, [largest_contour], -1, 255, -1)
-    
+
     # compute the percentage of masked pixels relative to the total
     # area of the image
     (h, w) = thresh.shape
@@ -133,18 +134,20 @@ def main(img_path: str = 'puzzles/sudoku_1.jpg'):
     polygon = find_sudoku_contour(thresh)
 
     if polygon is None:
-        print('Could not find Sudoku grid.')
+        warnings.warn('Could not find Sudoku grid.')
         return
-    
+
     warped_img = get_warped_image(gray, polygon)
-    print(img.shape)
-    print(warped_img.shape)
 
     # load pre-trained CNN
     model = keras.models.load_model('cnn_mnist_model.keras')
 
     grid = extract_digits(warped_img, model)
     sudoku = Sudoku(grid)
+    if not sudoku.valid:
+        print(sudoku)
+        return
+
     print(sudoku)
     sudoku.solve()
     print(sudoku)

@@ -1,42 +1,30 @@
+import warnings
+
+
 class Sudoku:
     def __init__(self, grid: list[list[int]]) -> None:
         self.grid = grid
+        self.valid = True
 
         # Pre-define row, column, and box sets for quick constraint checks
         self.rows = [set() for _ in range(9)]
         self.cols = [set() for _ in range(9)]
-        self.boxes = [[set() for _ in range(3)] for _ in range(3)]
+        self.boxes = [[set() for _ in range(3)] for _ in range(3)]        
 
-        # Validate the grid
-        if not self.is_valid_grid():
-            print(self)
-            raise Exception('Sudoku grid is invalid.')
-
-    def is_valid_grid(self) -> bool:
-        """Check if Sudoku grid is valid."""
         for r in range(9):
             for c in range(9):
                 num = self.grid[r][c]
                 if num == 0:  # Ignore empty cells
                     continue
-                
-                # Check row
-                if num in self.rows[r]:
-                    return False
+
+                if not self.is_valid(r, c, num):
+                    self.valid = False
                 self.rows[r].add(num)
-
-                # Check column
-                if num in self.cols[c]:
-                    return False
                 self.cols[c].add(num)
-
-                # Check 3x3 box
-                box_row, box_col = r // 3, c // 3
-                if num in self.boxes[box_row][box_col]:
-                    return False
-                self.boxes[box_row][box_col].add(num)
-
-        return True
+                self.boxes[r//3][c//3].add(num)
+        
+        if not self.valid:
+            warnings.warn('Warning: Sudoku grid is invalid.')
 
     def is_valid(self, r: int, c: int, k: int) -> bool:
         """Check if placing k at (r, c) is valid according to Sudoku rules."""
