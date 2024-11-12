@@ -2,6 +2,7 @@ from sudoku import Sudoku
 import math
 import numpy as np
 import cv2 as cv
+import keras
 
 
 def show_img(img):
@@ -86,8 +87,7 @@ def main(img_path: str = 'puzzles/sudoku_1.jpg'):
     print(warped_img.shape)
 
     # load pre-trained CNN
-    # model = tf.keras.models.load_model('mnist_cnn_model.h5')
-    model = ""
+    model = keras.models.load_model('cnn_mnist.keras')
 
     digits = extract_digits(warped_img, model)
 
