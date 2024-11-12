@@ -106,7 +106,6 @@ def main():
 
     # solve puzzle
     sudoku.solve()
-    print()
     print(sudoku)
 
 
