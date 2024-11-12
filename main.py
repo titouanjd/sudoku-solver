@@ -2,6 +2,7 @@ from sudoku import Sudoku
 import math
 import numpy as np
 import cv2 as cv
+import skimage as ski
 import keras
 
 
@@ -23,10 +24,10 @@ def preprocess_image(img_path):
     # black and white
     _, thresh = cv.threshold(blurred, thresh=127, maxval=255, type=cv.THRESH_BINARY_INV)
 
-    return img, thresh
+    return img, gray, thresh
 
 def find_sudoku_contour(thresh):
-    """Detect grid contours."""
+    """Detect Sudoku grid contours."""
     contours, _ = cv.findContours(thresh, mode=cv.RETR_EXTERNAL, method=cv.CHAIN_APPROX_SIMPLE)  # return external contours (mode) as list of points, only the end points of straight lines are stored (method)
     largest_contour = max(contours, key=cv.contourArea)  # based on point coordinates, find largest area - most likely to be full sudoku grid
     epsilon = 0.04 * cv.arcLength(largest_contour, closed=True)  # 4% of largest contour's perimeter
@@ -71,25 +72,82 @@ def get_warped_image(img, polygon):
 
     return warped_img
 
+def extract_digit(cell):
+    _, thresh = cv.threshold(cell, thresh=127, maxval=255, type=cv.THRESH_BINARY_INV)
+    thresh = ski.segmentation.clear_border(thresh)
+    contours, _ = cv.findContours(thresh, mode=cv.RETR_EXTERNAL, method=cv.CHAIN_APPROX_SIMPLE)  # return external contours (mode) as list of points, only the end points of straight lines are stored (method)
+
+    # if no contours were found than this is an empty cell
+    if len(contours) == 0:
+        return
+    
+    # otherwise, find the largest contour in the cell and create a
+    # mask for the contour
+    largest_contour = max(contours, key=cv.contourArea)
+    mask = np.zeros(thresh.shape, dtype="uint8")
+    cv.drawContours(mask, [largest_contour], -1, 255, -1)
+    
+    # compute the percentage of masked pixels relative to the total
+    # area of the image
+    (h, w) = thresh.shape
+    percentFilled = cv.countNonZero(mask) / float(w * h)
+    # if less than 3% of the mask is filled then we are looking at
+    # noise and can safely ignore the contour
+    if percentFilled < 0.03:
+        return None
+    # apply the mask to the thresholded cell
+    digit = cv.bitwise_and(thresh, thresh, mask=mask)
+    return digit
+
 def extract_digits(warped_img, model):
-    pass
+    """Extract digits from Sudoku grid using CNN model."""
+
+    cell_size = warped_img.shape[0] // 9
+    digits = []
+
+    for r in range(9):
+        row_digits = []
+        for c in range(9):
+            x, y = c * cell_size, r * cell_size
+            cell = warped_img[y:y + cell_size, x:x + cell_size]
+            digit = extract_digit(cell)
+            if digit is not None:
+                # preprocess cell for digit recognition
+                sized = cv.resize(digit, dsize=(28, 28))  # resize to 28x28 as CNN expects that
+                # normalise to [0, 1] and reshape for cnn model (height, width, channels)
+                cell_input = sized / 255
+                cell_input = cell_input.reshape(1, 28, 28, 1)
+                
+                # predict the digit using the CNN model
+                pred = np.argmax(model.predict(cell_input))
+                row_digits.append(pred)
+
+            else:
+                row_digits.append(0)
+        digits.append(row_digits)
+    
+    return digits
 
 def main(img_path: str = 'puzzles/sudoku_1.jpg'):
-    img, thresh = preprocess_image(img_path)
+    img, gray, thresh = preprocess_image(img_path)
     polygon = find_sudoku_contour(thresh)
 
     if polygon is None:
-        print("Couldn't find Sudoku grid.")
+        print('Could not find Sudoku grid.')
         return
     
-    warped_img = get_warped_image(img, polygon)
+    warped_img = get_warped_image(gray, polygon)
     print(img.shape)
     print(warped_img.shape)
 
     # load pre-trained CNN
-    model = keras.models.load_model('cnn_mnist.keras')
+    model = keras.models.load_model('cnn_mnist_model.keras')
 
-    digits = extract_digits(warped_img, model)
+    grid = extract_digits(warped_img, model)
+    sudoku = Sudoku(grid)
+    print(sudoku)
+    sudoku.solve()
+    print(sudoku)
 
 
 if __name__ == "__main__":

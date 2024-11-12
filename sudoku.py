@@ -1,16 +1,42 @@
 class Sudoku:
     def __init__(self, grid: list[list[int]]) -> None:
         self.grid = grid
-        self.height = len(grid)
-        self.width = len(grid[0])
 
         # Pre-define row, column, and box sets for quick constraint checks
-        self.rows = [set(row) for row in grid]
-        self.cols = [set(grid[i][j] for i in range(self.height)) for j in range(self.width)]
-        self.boxes = [
-            [set(grid[i][j] for i in range(r, r+3) for j in range(c, c+3))
-             for c in range(0, self.width, 3)] for r in range(0, self.height, 3)
-        ]
+        self.rows = [set() for _ in range(9)]
+        self.cols = [set() for _ in range(9)]
+        self.boxes = [[set() for _ in range(3)] for _ in range(3)]
+
+        # Validate the grid
+        if not self.is_valid_grid():
+            print(self)
+            raise Exception('Sudoku grid is invalid.')
+
+    def is_valid_grid(self) -> bool:
+        """Check if Sudoku grid is valid."""
+        for r in range(9):
+            for c in range(9):
+                num = self.grid[r][c]
+                if num == 0:  # Ignore empty cells
+                    continue
+                
+                # Check row
+                if num in self.rows[r]:
+                    return False
+                self.rows[r].add(num)
+
+                # Check column
+                if num in self.cols[c]:
+                    return False
+                self.cols[c].add(num)
+
+                # Check 3x3 box
+                box_row, box_col = r // 3, c // 3
+                if num in self.boxes[box_row][box_col]:
+                    return False
+                self.boxes[box_row][box_col].add(num)
+
+        return True
 
     def is_valid(self, r: int, c: int, k: int) -> bool:
         """Check if placing k at (r, c) is valid according to Sudoku rules."""
@@ -20,9 +46,9 @@ class Sudoku:
 
     def solve(self, r: int = 0, c: int = 0) -> bool:
         """Solve Sudoku puzzle."""
-        if r == self.height:  # if end of grid reached, final solution found
+        if r == 9:  # if end of grid reached, final solution found
             return True
-        elif c == self.width:  # if last column reached, change row
+        elif c == 9:  # if last column reached, change row
             return self.solve(r+1, 0)
         elif self.grid[r][c] != 0:  # if cell already filled, change column
             return self.solve(r, c+1)
@@ -44,22 +70,22 @@ class Sudoku:
     def __str__(self) -> str:
         """Return a string representation of the Sudoku grid."""
         grid_str = ""
-        for i in range(self.height):
+        for i in range(9):
             if i % 3 == 0 and i != 0:
                 grid_str += "----- + ----- + -----\n"
 
-            for j in range(self.width):
+            for j in range(9):
                 if j % 3 == 0 and j != 0:
                     grid_str += "| "
 
                 grid_str += str(self.grid[i][j]) if self.grid[i][j] != 0 else "."
                 
-                if j != self.width - 1:
+                if j != 9 - 1:
                     grid_str += " "
                 else:
                     grid_str += "\n"
 
-        return grid_str.strip()  # Remove trailing newline
+        return grid_str
 
 def main():
     grid = [
@@ -80,7 +106,8 @@ def main():
 
     # solve puzzle
     sudoku.solve()
-    print("\n", sudoku)
+    print()
+    print(sudoku)
 
 
 if __name__ == "__main__":
