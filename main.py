@@ -29,12 +29,14 @@ def preprocess_image(img_path):
 
 def find_sudoku_contour(thresh):
     """Detect Sudoku grid contours."""
-    contours, _ = cv.findContours(thresh, mode=cv.RETR_EXTERNAL, method=cv.CHAIN_APPROX_SIMPLE)  # return external contours (mode) as list of points, only the end points of straight lines are stored (method)
-    largest_contour = max(contours, key=cv.contourArea)  # based on point coordinates, find largest area - most likely to be full sudoku grid
-    epsilon = 0.04 * cv.arcLength(largest_contour, closed=True)  # 4% of largest contour's perimeter
-    polygon = cv.approxPolyDP(largest_contour, epsilon=epsilon, closed=True)
-    if len(polygon) == 4:  # It's the Sudoku grid
-        return polygon
+    contours, _ = cv.findContours(thresh, mode=cv.RETR_EXTERNAL, method=cv.CHAIN_APPROX_SIMPLE)
+    # based on point coordinates, find largest 4-point area - most likely to be full sudoku grid
+    contours = sorted(contours, key=cv.contourArea, reverse=True)
+    for cont in contours:
+        epsilon = 0.04 * cv.arcLength(cont, closed=True)  # 4% of contour's perimeter
+        polygon = cv.approxPolyDP(cont, epsilon=epsilon, closed=True)  # approximate contour
+        if len(polygon) == 4:  # It's the Sudoku grid
+            return polygon
     return None
 
 # Warp the perspective to get the top-down view of the grid
@@ -52,9 +54,8 @@ def get_warped_image(img, polygon):
     top_right = polygon[max(range(len(polygon)), key=lambda i: diffs[i])][0]
     bottom_left = polygon[min(range(len(polygon)), key=lambda i: diffs[i])][0]
 
-    # source po
-    source_points = np.array([top_left, top_right, bottom_right, bottom_left],
-                             dtype='float32')
+    # source points
+    src = np.array([top_left, top_right, bottom_right, bottom_left], dtype='float32')
 
     # side length of square
     side = int(max(
@@ -64,38 +65,37 @@ def get_warped_image(img, polygon):
         math.dist(bottom_left, top_left)
     ))
 
-    dest_points = np.array([[0, 0], [side, 0], [side, side], [0, side]],
-                           dtype='float32')
+    # destination points
+    dst = np.array([[0, 0], [side, 0], [side, side], [0, side]], dtype='float32')
 
     # compute perspective transform matrix and apply it to image
-    matrix = cv.getPerspectiveTransform(src=source_points, dst=dest_points)
+    matrix = cv.getPerspectiveTransform(src, dst)
     warped_img = cv.warpPerspective(img, matrix, dsize=(side, side))
 
     return warped_img
 
 def extract_digit(cell):
     _, thresh = cv.threshold(cell, thresh=127, maxval=255, type=cv.THRESH_BINARY_INV)
-    thresh = ski.segmentation.clear_border(thresh)
-    contours, _ = cv.findContours(thresh, mode=cv.RETR_EXTERNAL, method=cv.CHAIN_APPROX_SIMPLE)  # return external contours (mode) as list of points, only the end points of straight lines are stored (method)
+    thresh = ski.segmentation.clear_border(thresh)  # remove borders
+    contours, _ = cv.findContours(thresh, mode=cv.RETR_EXTERNAL, method=cv.CHAIN_APPROX_SIMPLE)
 
     # if no contours were found than this is an empty cell
     if len(contours) == 0:
         return
 
-    # otherwise, find the largest contour in the cell and create a
-    # mask for the contour
+    # otherwise, find the largest contour in the cell and create a mask for it
     largest_contour = max(contours, key=cv.contourArea)
-    mask = np.zeros(thresh.shape, dtype="uint8")
-    cv.drawContours(mask, [largest_contour], -1, 255, -1)
+    mask = np.zeros(thresh.shape, dtype='uint8')
+    cv.drawContours(mask, contours=[largest_contour], contourIdx=-1, color=255, thickness=-1)
 
-    # compute the percentage of masked pixels relative to the total
-    # area of the image
+    # compute the percentage of masked pixels relative to the total image area
     (h, w) = thresh.shape
-    percentFilled = cv.countNonZero(mask) / float(w * h)
-    # if less than 3% of the mask is filled then we are looking at
-    # noise and can safely ignore the contour
-    if percentFilled < 0.03:
-        return None
+    percent_filled = cv.countNonZero(mask) / (w * h)
+
+    # if less than 3% of the mask is filled then it is noise, can ignore
+    if percent_filled < 0.03:
+        return
+
     # apply the mask to the thresholded cell
     digit = cv.bitwise_and(thresh, thresh, mask=mask)
     return digit
@@ -115,10 +115,11 @@ def extract_digits(warped_img, model):
             if digit is not None:
                 # preprocess cell for digit recognition
                 sized = cv.resize(digit, dsize=(28, 28))  # resize to 28x28 as CNN expects that
+
                 # normalise to [0, 1] and reshape for cnn model (height, width, channels)
-                cell_input = sized / 255
+                cell_input = sized.astype("float32") / 255
                 cell_input = cell_input.reshape(1, 28, 28, 1)
-                
+
                 # predict the digit using the CNN model
                 pred = np.argmax(model.predict(cell_input))
                 row_digits.append(pred)
@@ -126,10 +127,10 @@ def extract_digits(warped_img, model):
             else:
                 row_digits.append(0)
         digits.append(row_digits)
-    
+
     return digits
 
-def main(img_path: str = 'puzzles/sudoku_1.jpg'):
+def main(img_path: str = 'puzzles/sudoku.jpg'):
     img, gray, thresh = preprocess_image(img_path)
     polygon = find_sudoku_contour(thresh)
 
@@ -143,6 +144,7 @@ def main(img_path: str = 'puzzles/sudoku_1.jpg'):
     model = keras.models.load_model('cnn_mnist_model.keras')
 
     grid = extract_digits(warped_img, model)
+
     sudoku = Sudoku(grid)
     if not sudoku.valid:
         print(sudoku)
