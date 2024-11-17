@@ -7,13 +7,14 @@ import skimage as ski
 import keras
 
 
-def show_img(img):
+def show_img(img: np.ndarray) -> None:
+    """Show an image on screen."""
     cv.imshow(f'Sudoku grid {img.shape}', img)
     cv.waitKey()
     cv.destroyAllWindows()
 
-def preprocess_image(img_path):
-    """Preprocess the Sudoku image"""
+def preprocess_image(img_path: str) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Preprocess the Sudoku image."""
     img = cv.imread(img_path)
 
     # convert to grayscale
@@ -27,7 +28,7 @@ def preprocess_image(img_path):
 
     return img, gray, thresh
 
-def find_sudoku_contour(thresh):
+def get_grid_contour(thresh: np.ndarray) -> np.ndarray | None:
     """Detect Sudoku grid contours."""
     contours, _ = cv.findContours(thresh, mode=cv.RETR_EXTERNAL, method=cv.CHAIN_APPROX_SIMPLE)
     # based on point coordinates, find largest 4-point area - most likely to be full sudoku grid
@@ -35,14 +36,13 @@ def find_sudoku_contour(thresh):
     for cont in contours:
         epsilon = 0.04 * cv.arcLength(cont, closed=True)  # 4% of contour's perimeter
         polygon = cv.approxPolyDP(cont, epsilon=epsilon, closed=True)  # approximate contour
-        if len(polygon) == 4:  # It's the Sudoku grid
+        if len(polygon) == 4:  # it's the Sudoku grid
             return polygon
     warnings.warn('Could not find Sudoku grid.')
     return None
 
-# Warp the perspective to get the top-down view of the grid
-def get_warped_image(img, polygon):
-    """Store Sudoku grid in square image"""
+def warp_image(img: np.ndarray, polygon: np.ndarray) -> np.ndarray:
+    """Warp Sudoku grid to store it in a square image."""
     # identify the four corners of the polygon
     # bottom-right point has the largest (x + y) value
     # top-left point has the smallest (x + y) value
@@ -75,7 +75,47 @@ def get_warped_image(img, polygon):
 
     return warped_img
 
-def extract_digit(cell):
+def extract_grid(warped_img: np.ndarray) -> list[list[int]]:
+    """
+    Extract the Sudoku grid digits from a warped image. The value of each
+    extracted digit is predicted using a pre-trained CNN model.
+    """
+    # load the CNN model
+    model = keras.models.load_model('cnn_mnist_model.keras')
+
+    # loop over grid cells to extract the digits and make predictions
+    cell_size = warped_img.shape[0] // 9
+    grid = []
+    for r in range(9):
+        grid_row = []
+        for c in range(9):
+            x, y = c * cell_size, r * cell_size
+            cell = warped_img[y:y + cell_size, x:x + cell_size]
+            digit = extract_digit(cell)
+            if digit is not None:
+                # resize to 28x28 for the CNN model
+                sized = cv.resize(digit, dsize=(28, 28))
+
+                # normalise to [0, 1] and reshape for the CNN model
+                digit_input = sized.astype('float32') / 255
+                digit_input = digit_input.reshape(1, 28, 28, 1)
+
+                # predict the digit using the CNN model
+                pred = np.argmax(model.predict(digit_input, verbose=0))
+                grid_row.append(pred)
+
+            else:
+                grid_row.append(0)
+        grid.append(grid_row)
+
+    return grid
+
+def extract_digit(cell: np.ndarray) -> np.ndarray | None:
+    """
+    Extract the digit from a Sudoku a cell.
+    Scale the digit to 75% of the cell height.
+    Center the digit on the cell.
+    """
     _, thresh = cv.threshold(cell, thresh=127, maxval=255, type=cv.THRESH_BINARY_INV)
     thresh = ski.segmentation.clear_border(thresh)  # remove borders
     contours, _ = cv.findContours(thresh, mode=cv.RETR_EXTERNAL, method=cv.CHAIN_APPROX_SIMPLE)
@@ -93,76 +133,41 @@ def extract_digit(cell):
         return None
 
     # crop the digit from the cell
-    digit = thresh[y:y + height, x:x + width]
+    cropped_digit = thresh[y:y + height, x:x + width]
 
     # scale the digit to 75% of the cell height
-    target_height = int(cell.shape[0] * 0.75)
-    scaling_factor = target_height / height
-    target_width = int(width * scaling_factor)
-    digit = cv.resize(digit, (target_width, target_height), interpolation=cv.INTER_LINEAR)
+    new_height = int(cell.shape[0] * 0.75)
+    scale_ratio = new_height / height
+    new_width = int(width * scale_ratio)
+    cropped_digit = cv.resize(cropped_digit, dsize=(new_width, new_height))
 
-    # create a blank canvas the same size and dtype as the cell
-    canvas = np.zeros_like(cell)
+    # center the digit in the cell
+    digit = np.zeros_like(cell)
+    x_offset = (digit.shape[0] - new_width) // 2
+    y_offset = (digit.shape[1] - new_height) // 2
+    digit[y_offset:y_offset + new_height,
+          x_offset:x_offset + new_width] = cropped_digit
 
-    # calculate offsets to center the digit
-    x_offset = (canvas.shape[0] - target_width) // 2
-    y_offset = (canvas.shape[1] - target_height) // 2
-
-    # place the digit at the center of the canvas
-    canvas[y_offset:y_offset + target_height, x_offset:x_offset + target_width] = digit
-
-    return canvas
-
-def extract_digits(warped_img, model):
-    """Extract digits from Sudoku grid using CNN model."""
-
-    cell_size = warped_img.shape[0] // 9
-    digits = []
-
-    for r in range(9):
-        row_digits = []
-        for c in range(9):
-            x, y = c * cell_size, r * cell_size
-            cell = warped_img[y:y + cell_size, x:x + cell_size]
-            digit = extract_digit(cell)
-            if digit is not None:
-                # preprocess cell for digit recognition
-                sized = cv.resize(digit, dsize=(28, 28))  # resize to 28x28 as CNN expects that
-
-                # normalise to [0, 1] and reshape for cnn model (height, width, channels)
-                cell_input = sized.astype("float32") / 255
-                cell_input = cell_input.reshape(1, 28, 28, 1)
-
-                # predict the digit using the CNN model
-                pred = np.argmax(model.predict(cell_input, verbose=0))
-                row_digits.append(pred)
-
-            else:
-                row_digits.append(0)
-        digits.append(row_digits)
-
-    return digits
+    return digit
 
 def main(img_path: str = 'puzzles/sudoku_1.jpg'):
     img, gray, thresh = preprocess_image(img_path)
-    polygon = find_sudoku_contour(thresh)
+
+    polygon = get_grid_contour(thresh)
 
     if polygon is None:
         return
 
-    warped_img = get_warped_image(gray, polygon)
+    warped_img = warp_image(gray, polygon)
 
-    # load pre-trained CNN
-    model = keras.models.load_model('cnn_mnist_model.keras')
-
-    grid = extract_digits(warped_img, model)
+    grid = extract_grid(warped_img)
 
     sudoku = Sudoku(grid)
+    print(sudoku)
+
     if not sudoku.valid:
-        print(sudoku)
         return
 
-    print(sudoku)
     sudoku.solve()
     print(sudoku)
 
