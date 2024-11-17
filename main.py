@@ -37,6 +37,7 @@ def find_sudoku_contour(thresh):
         polygon = cv.approxPolyDP(cont, epsilon=epsilon, closed=True)  # approximate contour
         if len(polygon) == 4:  # It's the Sudoku grid
             return polygon
+    warnings.warn('Could not find Sudoku grid.')
     return None
 
 # Warp the perspective to get the top-down view of the grid
@@ -79,26 +80,38 @@ def extract_digit(cell):
     thresh = ski.segmentation.clear_border(thresh)  # remove borders
     contours, _ = cv.findContours(thresh, mode=cv.RETR_EXTERNAL, method=cv.CHAIN_APPROX_SIMPLE)
 
-    # if no contours were found than this is an empty cell
-    if len(contours) == 0:
-        return
+    # if no contours were found then this is an empty cell
+    if not contours:
+        return None
 
-    # otherwise, find the largest contour in the cell and create a mask for it
+    # otherwise, find the bounding box of the largest contour in the cell
     largest_contour = max(contours, key=cv.contourArea)
-    mask = np.zeros(thresh.shape, dtype='uint8')
-    cv.drawContours(mask, contours=[largest_contour], contourIdx=-1, color=255, thickness=-1)
+    x, y, width, height = cv.boundingRect(largest_contour)
 
-    # compute the percentage of masked pixels relative to the total image area
-    (h, w) = thresh.shape
-    percent_filled = cv.countNonZero(mask) / (w * h)
+    # if less than 3% of the cell is filled then it is noise, can ignore
+    if width * height < 0.03 * cell.size:
+        return None
 
-    # if less than 3% of the mask is filled then it is noise, can ignore
-    if percent_filled < 0.03:
-        return
+    # crop the digit from the cell
+    digit = thresh[y:y + height, x:x + width]
 
-    # apply the mask to the thresholded cell
-    digit = cv.bitwise_and(thresh, thresh, mask=mask)
-    return digit
+    # scale the digit to 75% of the cell height
+    target_height = int(cell.shape[0] * 0.75)
+    scaling_factor = target_height / height
+    target_width = int(width * scaling_factor)
+    digit = cv.resize(digit, (target_width, target_height), interpolation=cv.INTER_LINEAR)
+
+    # create a blank canvas the same size and dtype as the cell
+    canvas = np.zeros_like(cell)
+
+    # calculate offsets to center the digit
+    x_offset = (canvas.shape[0] - target_width) // 2
+    y_offset = (canvas.shape[1] - target_height) // 2
+
+    # place the digit at the center of the canvas
+    canvas[y_offset:y_offset + target_height, x_offset:x_offset + target_width] = digit
+
+    return canvas
 
 def extract_digits(warped_img, model):
     """Extract digits from Sudoku grid using CNN model."""
@@ -121,7 +134,7 @@ def extract_digits(warped_img, model):
                 cell_input = cell_input.reshape(1, 28, 28, 1)
 
                 # predict the digit using the CNN model
-                pred = np.argmax(model.predict(cell_input))
+                pred = np.argmax(model.predict(cell_input, verbose=0))
                 row_digits.append(pred)
 
             else:
@@ -130,12 +143,11 @@ def extract_digits(warped_img, model):
 
     return digits
 
-def main(img_path: str = 'puzzles/sudoku.jpg'):
+def main(img_path: str = 'puzzles/sudoku_1.jpg'):
     img, gray, thresh = preprocess_image(img_path)
     polygon = find_sudoku_contour(thresh)
 
     if polygon is None:
-        warnings.warn('Could not find Sudoku grid.')
         return
 
     warped_img = get_warped_image(gray, polygon)
