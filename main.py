@@ -7,6 +7,10 @@ import skimage as ski
 import keras
 
 
+IMG_PATH: str = 'puzzles/image.jpg'
+DEBUG: bool = False
+
+
 def show_img(img: np.ndarray) -> None:
     """Show an image on screen."""
     cv.imshow(f'Sudoku grid {img.shape}', img)
@@ -150,8 +154,13 @@ def extract_digit(cell: np.ndarray) -> np.ndarray | None:
 
     return digit
 
-def main(img_path: str = 'puzzles/sudoku_1.jpg'):
-    img, gray, thresh = preprocess_image(img_path)
+def main():
+    img, gray, thresh = preprocess_image(IMG_PATH)
+
+    if DEBUG:
+        show_img(img)
+        show_img(gray)
+        show_img(thresh)
 
     polygon = get_grid_contour(thresh)
 
@@ -159,6 +168,9 @@ def main(img_path: str = 'puzzles/sudoku_1.jpg'):
         return
 
     warped_img = warp_image(gray, polygon)
+
+    if DEBUG:
+        show_img(warped_img)
 
     grid = extract_grid(warped_img)
 
