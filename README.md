@@ -14,17 +14,17 @@ A 9x9 Sudoku puzzle is detected from an image using a CNN trained on the MNIST d
 ### Original sudoku puzzle
 Load a picture of a Sudoku puzzle.
 
-<img src="images/original.jpg" width="400">
+<img src="images/original.jpg" width="500">
 
 ### Grayscale image
-Convert the colored image to a single grayscale channel for alignment with MNIST digits.
+Convert the colored image to a single grayscale channel to match the MNIST digits.
 
-<img src="images/gray.jpg" width="400">
+<img src="images/gray.jpg" width="500">
 
 ### Binary image
 Convert the image to black and white to better detect the grid borders.
 
-<img src="images/thresh.jpg" width="400">
+<img src="images/thresh.jpg" width="500">
 
 ### Warped image
 Warp the sudoku grid to fit the frame.
