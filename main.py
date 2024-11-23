@@ -7,7 +7,7 @@ import skimage as ski
 import keras
 
 
-IMG_PATH: str = 'puzzles/image.jpg'
+IMG_PATH: str = 'puzzles/sudoku.jpg'
 DEBUG: bool = False
 
 
@@ -175,13 +175,13 @@ def main():
     grid = extract_grid(warped_img)
 
     sudoku = Sudoku(grid)
-    print(sudoku)
+    print('Sudoku grid:', sudoku, sep='\n')
 
     if not sudoku.valid:
         return
 
     sudoku.solve()
-    print(sudoku)
+    print('Solution:', sudoku, sep='\n')
 
 
 if __name__ == "__main__":
