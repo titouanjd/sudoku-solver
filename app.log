@@ -1,0 +1,6 @@
+2025-02-22 20:48:20,022 - __main__ - INFO - Preprocessing image
+2025-02-22 20:48:20,033 - __main__ - INFO - Detecting grid contours
+2025-02-22 20:48:20,037 - __main__ - INFO - Warping image
+2025-02-22 20:48:20,039 - __main__ - INFO - Extracting grid and making digit predictions using CNN
+2025-02-22 20:48:21,731 - sudoku - INFO - Reading Sudoku grid
+2025-02-22 20:48:21,731 - sudoku - INFO - Solving Sudoku

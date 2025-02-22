@@ -1,4 +1,8 @@
-import warnings
+import logging
+
+
+# Create a logger for sudoku.py
+logger = logging.getLogger(__name__)
 
 
 class Sudoku:
@@ -11,6 +15,8 @@ class Sudoku:
         self.cols = [set() for _ in range(9)]
         self.boxes = [[set() for _ in range(3)] for _ in range(3)]        
 
+        logger.info('Reading Sudoku grid')
+
         for r in range(9):
             for c in range(9):
                 num = self.grid[r][c]
@@ -22,9 +28,9 @@ class Sudoku:
                 self.rows[r].add(num)
                 self.cols[c].add(num)
                 self.boxes[r//3][c//3].add(num)
-        
+
         if not self.valid:
-            warnings.warn('Warning: Sudoku grid is invalid.')
+            logger.warning('Sudoku grid is not valid')
 
     def is_valid(self, r: int, c: int, k: int) -> bool:
         """Check if placing k at (r, c) is valid according to Sudoku rules."""
@@ -32,14 +38,21 @@ class Sudoku:
             return False
         return True
 
-    def solve(self, r: int = 0, c: int = 0) -> bool:
+    def solve(self, r: int = 0, c: int = 0, first_call: bool = True) -> bool:
         """Solve Sudoku puzzle."""
+
+        if first_call:
+            logger.info('Solving Sudoku')
+        if not self.valid:
+            logger.critical('Sudoku is not solvable due to invalid grid')
+            raise ValueError('The Sudoku grid is invalid and cannot be solved')
+
         if r == 9:  # if end of grid reached, final solution found
             return True
         elif c == 9:  # if last column reached, change row
-            return self.solve(r+1, 0)
+            return self.solve(r+1, 0, False)
         elif self.grid[r][c] != 0:  # if cell already filled, change column
-            return self.solve(r, c+1)
+            return self.solve(r, c+1, False)
         else:
             for k in range(1, 10):  # try all k=0-9 values
                 if self.is_valid(r, c, k):  # check if k is valid at (r, c)
@@ -47,7 +60,7 @@ class Sudoku:
                     self.rows[r].add(k)
                     self.cols[c].add(k)
                     self.boxes[r//3][c//3].add(k)
-                    if self.solve(r, c+1):
+                    if self.solve(r, c+1, False):
                         return True
                     self.grid[r][c] = 0  # reset cell value if impossible
                     self.rows[r].remove(k)

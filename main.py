@@ -1,5 +1,5 @@
 from sudoku import Sudoku
-import warnings
+import logging
 import math
 import numpy as np
 import cv2 as cv
@@ -9,7 +9,26 @@ import keras
 
 IMG_PATH: str = 'puzzles/sudoku.jpg'
 DEBUG: bool = False
+LOGGING_LEVEL: int = logging.DEBUG
 
+
+# Configure the logging
+logging.basicConfig(
+    level=LOGGING_LEVEL,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('app.log'),
+        logging.StreamHandler()
+    ]
+)
+
+# Create a logger for main.py
+logger = logging.getLogger(__name__)
+
+
+class GridNotFoundError(Exception):
+    """Exception raised when the Sudoku grid is not found."""
+    pass
 
 def show_img(img: np.ndarray) -> None:
     """Show an image on screen."""
@@ -19,6 +38,8 @@ def show_img(img: np.ndarray) -> None:
 
 def preprocess_image(img_path: str) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Preprocess the Sudoku image."""
+    logger.info('Preprocessing image')
+
     img = cv.imread(img_path)
 
     # convert to grayscale
@@ -34,6 +55,8 @@ def preprocess_image(img_path: str) -> tuple[np.ndarray, np.ndarray, np.ndarray]
 
 def get_grid_contour(thresh: np.ndarray) -> np.ndarray | None:
     """Detect Sudoku grid contours."""
+    logger.info('Detecting grid contours')
+
     contours, _ = cv.findContours(thresh, mode=cv.RETR_EXTERNAL, method=cv.CHAIN_APPROX_SIMPLE)
     # based on point coordinates, find largest 4-point area - most likely to be full sudoku grid
     contours = sorted(contours, key=cv.contourArea, reverse=True)
@@ -42,11 +65,13 @@ def get_grid_contour(thresh: np.ndarray) -> np.ndarray | None:
         polygon = cv.approxPolyDP(cont, epsilon=epsilon, closed=True)  # approximate contour
         if len(polygon) == 4:  # it's the Sudoku grid
             return polygon
-    warnings.warn('Could not find Sudoku grid.')
-    return None
+    logger.critical('Sudoku grid not detected')
+    raise GridNotFoundError('The sudoku grid was not detected. Try another picture')
 
 def warp_image(img: np.ndarray, polygon: np.ndarray) -> np.ndarray:
     """Warp Sudoku grid to store it in a square image."""
+    logger.info('Warping image')
+
     # identify the four corners of the polygon
     # bottom-right point has the largest (x + y) value
     # top-left point has the smallest (x + y) value
@@ -84,6 +109,8 @@ def extract_grid(warped_img: np.ndarray) -> list[list[int]]:
     Extract the Sudoku grid digits from a warped image. The value of each
     extracted digit is predicted using a pre-trained CNN model.
     """
+    logger.info('Extracting grid and making digit predictions using CNN')
+
     # load the CNN model
     model = keras.models.load_model('cnn_mnist_model.keras')
 
@@ -164,9 +191,6 @@ def main():
 
     polygon = get_grid_contour(thresh)
 
-    if polygon is None:
-        return
-
     warped_img = warp_image(gray, polygon)
 
     if DEBUG:
@@ -176,9 +200,6 @@ def main():
 
     sudoku = Sudoku(grid)
     print('Sudoku grid:', sudoku, sep='\n')
-
-    if not sudoku.valid:
-        return
 
     sudoku.solve()
     print('Solution:', sudoku, sep='\n')
